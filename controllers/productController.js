@@ -3,27 +3,54 @@ const StockTransaction = require('../models/StockTransaction');
 const Category = require('../models/Category');
 const Supplier = require('../models/Supplier');
 const { catchAsync } = require('../middleware/errorMiddleware');
+const mongoose = require('mongoose');
 
-// @desc    Fetch low stock products (NEW)
-// @route   GET /api/products/low-stock
+// Helper function: Smart lookup or create Category by Name or ID
+async function resolveCategory(catInput) {
+    if (!catInput) return null;
+    // If it's already a valid 24-char MongoDB ObjectId, use it directly
+    if (mongoose.Types.ObjectId.isValid(catInput)) {
+        return catInput;
+    }
+    // Otherwise, treat it as a name string. Search case-insensitively.
+    let category = await Category.findOne({ name: { $regex: new RegExp(`^${catInput}$`, 'i') } });
+    if (!category) {
+        // Automatically create the category if it doesn't exist!
+        category = await Category.create({ name: catInput, description: 'Auto-created via product form' });
+    }
+    return category._id;
+}
+
+// Helper function: Smart lookup or create Supplier by Name or ID
+async function resolveSupplier(supInput) {
+    if (!supInput) return null;
+    if (mongoose.Types.ObjectId.isValid(supInput)) {
+        return supInput;
+    }
+    let supplier = await Supplier.findOne({ name: { $regex: new RegExp(`^${supInput}$`, 'i') } });
+    if (!supplier) {
+        // Automatically create the supplier if it doesn't exist!
+        supplier = await Supplier.create({
+            name: supInput,
+            contactEmail: `${supInput.toLowerCase().replace(/\s+/g, '')}@supplier.com`,
+            contactPhone: '555-0100'
+        });
+    }
+    return supplier._id;
+}
+
+// @desc    Fetch low stock products
 exports.getLowStockProducts = catchAsync(async (req, res) => {
-    // Default threshold is 10, or you can pass ?threshold=5 in the URL
     const threshold = Number(req.query.threshold) || 10;
-
     const products = await Product.find({ quantity: { $lte: threshold } })
         .populate('category', 'name')
         .populate('supplier', 'name contactEmail')
-        .sort('quantity'); // Sorts lowest stock first
+        .sort('quantity');
 
-    res.status(200).json({
-        success: true,
-        count: products.length,
-        data: products
-    });
+    res.status(200).json({ success: true, count: products.length, data: products });
 });
 
-// @desc    Fetch all products (Search, Filter, Sort, Pagination)
-// @route   GET /api/products
+// @desc    Fetch all products
 exports.getProducts = catchAsync(async (req, res) => {
     const keyword = req.query.search ? { name: { $regex: req.query.search, $options: 'i' } } : {};
     const categoryFilter = req.query.category ? { category: req.query.category } : {};
@@ -51,7 +78,6 @@ exports.getProducts = catchAsync(async (req, res) => {
 });
 
 // @desc    Fetch single product by ID
-// @route   GET /api/products/:id
 exports.getProductById = catchAsync(async (req, res) => {
     const product = await Product.findById(req.params.id)
         .populate('category')
@@ -65,12 +91,22 @@ exports.getProductById = catchAsync(async (req, res) => {
     res.status(200).json({ success: true, data: product });
 });
 
-// @desc    Create a new product & Log initial stock
-// @route   POST /api/products
+// @desc    Create a new product with Smart Lookup
 exports.createProduct = catchAsync(async (req, res) => {
-    const { name, category, price, quantity, supplier } = req.body;
+    let { name, category, price, quantity, supplier } = req.body;
 
-    const product = new Product({ name, category, price, quantity, supplier });
+    // Smart Resolution: Automatically finds or creates categories/suppliers by name or ID
+    const categoryId = await resolveCategory(category);
+    const supplierId = await resolveSupplier(supplier);
+
+    const product = new Product({
+        name,
+        category: categoryId,
+        price,
+        quantity,
+        supplier: supplierId
+    });
+
     const savedProduct = await product.save();
 
     if (quantity > 0) {
@@ -86,8 +122,7 @@ exports.createProduct = catchAsync(async (req, res) => {
     res.status(201).json({ success: true, message: 'Product created successfully', data: savedProduct });
 });
 
-// @desc    Update a product by ID & Log stock changes
-// @route   PUT /api/products/:id
+// @desc    Update a product by ID with Smart Lookup
 exports.updateProduct = catchAsync(async (req, res) => {
     const product = await Product.findById(req.params.id);
 
@@ -99,6 +134,14 @@ exports.updateProduct = catchAsync(async (req, res) => {
     const oldQuantity = product.quantity;
     const newQuantity = req.body.quantity !== undefined ? req.body.quantity : oldQuantity;
     const difference = newQuantity - oldQuantity;
+
+    // If category or supplier are being updated, run them through smart resolver
+    if (req.body.category) {
+        req.body.category = await resolveCategory(req.body.category);
+    }
+    if (req.body.supplier) {
+        req.body.supplier = await resolveSupplier(req.body.supplier);
+    }
 
     Object.assign(product, req.body);
     const updatedProduct = await product.save();
@@ -117,7 +160,6 @@ exports.updateProduct = catchAsync(async (req, res) => {
 });
 
 // @desc    Delete a product by ID
-// @route   DELETE /api/products/:id
 exports.deleteProduct = catchAsync(async (req, res) => {
     const deletedProduct = await Product.findByIdAndDelete(req.params.id);
 
@@ -129,31 +171,24 @@ exports.deleteProduct = catchAsync(async (req, res) => {
     res.status(200).json({ success: true, message: 'Product deleted successfully', data: deletedProduct });
 });
 
-// ==========================================
-// POS SELL FEATURE: Deduct stock & log audit
-// ==========================================
+// @desc    POS Sell Feature
 exports.sellProduct = async (req, res) => {
     try {
         const { quantitySold } = req.body;
         const productId = req.params.id;
 
-        // 1. Find the product
         const product = await Product.findById(productId);
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
 
-        // 2. Prevent Negative Stock (Safety Check)
         if (product.quantity < quantitySold) {
             return res.status(400).json({ message: `Only ${product.quantity} items left in stock!` });
         }
 
-        // 3. Deduct the stock and save
         product.quantity -= quantitySold;
         await product.save();
 
-        // 4. Create the Audit Trail (Stock Transaction)
-        // Note: I matched 'quantityChanged' to your database schema used above
         await StockTransaction.create({
             product: productId,
             user: req.user._id,
@@ -169,16 +204,14 @@ exports.sellProduct = async (req, res) => {
     }
 };
 
-// ==========================================
-// ADMIN FEATURE: View Sales & Stock History
-// ==========================================
+// @desc    Transaction History
 exports.getTransactionHistory = async (req, res) => {
     try {
         const transactions = await StockTransaction.find()
             .populate('product', 'name price')
-            .populate('user', 'name email') // Gets the employee's name/email
-            .sort({ createdAt: -1 }) // Newest first
-            .limit(50); // Show latest 50 logs
+            .populate('user', 'name email')
+            .sort({ createdAt: -1 })
+            .limit(50);
 
         res.status(200).json({ success: true, data: transactions });
     } catch (error) {
