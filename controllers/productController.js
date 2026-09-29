@@ -202,20 +202,21 @@ exports.sellProduct = async (req, res) => {
     }
 };
 
-// @desc    Transaction History (Role-based: Admin sees all, User sees only their own)
+// @desc    Transaction History (Admin sees all, User sees ONLY their SALES/OUT)
 exports.getTransactionHistory = async (req, res) => {
     try {
         let query = {};
 
         if (req.user.role !== 'admin') {
-            query = { user: req.user._id };
+            // User ONLY sees their own items, and ONLY items they SOLD (OUT)
+            query = { user: req.user._id, type: 'OUT' };
         }
 
         const transactions = await StockTransaction.find(query)
             .populate('product', 'name price')
             .populate('user', 'name email')
             .sort({ createdAt: -1 })
-            .limit(50);
+            .limit(100);
 
         res.status(200).json({ success: true, data: transactions });
     } catch (error) {
