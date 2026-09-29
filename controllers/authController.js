@@ -1,17 +1,13 @@
-// controllers/authController.js
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { catchAsync } = require('../middleware/errorMiddleware');
 
-// FIXED: Now we pass the role into the token so React can read it!
 const generateToken = (id, role) => {
     return jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 };
 
-// @desc    Register new user
-// @route   POST /api/auth/register
 exports.register = catchAsync(async (req, res) => {
-    // FIX: Brought 'name' back so we catch what the user actually types!
+    // We are pulling the ACTUAL NAME the user types in the form now.
     const { name, email, password, role } = req.body;
 
     const userExists = await User.findOne({ email });
@@ -20,11 +16,11 @@ exports.register = catchAsync(async (req, res) => {
         throw new Error('User already exists');
     }
 
-    // Save the ACTUAL name they typed into the users1 database collection
+    // Saves the exact name to the DB. No more user1, user2 nonsense.
     const user = await User.create({
-        name: name,
-        email: email,
-        password: password,
+        name,
+        email,
+        password,
         role: role || 'user'
     });
 
@@ -35,11 +31,8 @@ exports.register = catchAsync(async (req, res) => {
     });
 });
 
-// @desc    Login user & get token
-// @route   POST /api/auth/login
 exports.login = catchAsync(async (req, res) => {
     const { email, password } = req.body;
-
     const user = await User.findOne({ email });
 
     if (user && (await user.matchPassword(password))) {
