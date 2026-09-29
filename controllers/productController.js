@@ -95,7 +95,6 @@ exports.getProductById = catchAsync(async (req, res) => {
 exports.createProduct = catchAsync(async (req, res) => {
     let { name, category, price, quantity, supplier } = req.body;
 
-    // Smart Resolution: Automatically finds or creates categories/suppliers by name or ID
     const categoryId = await resolveCategory(category);
     const supplierId = await resolveSupplier(supplier);
 
@@ -135,7 +134,6 @@ exports.updateProduct = catchAsync(async (req, res) => {
     const newQuantity = req.body.quantity !== undefined ? req.body.quantity : oldQuantity;
     const difference = newQuantity - oldQuantity;
 
-    // If category or supplier are being updated, run them through smart resolver
     if (req.body.category) {
         req.body.category = await resolveCategory(req.body.category);
     }
@@ -204,10 +202,16 @@ exports.sellProduct = async (req, res) => {
     }
 };
 
-// @desc    Transaction History
+// @desc    Transaction History (Role-based: Admin sees all, User sees only their own)
 exports.getTransactionHistory = async (req, res) => {
     try {
-        const transactions = await StockTransaction.find()
+        let query = {};
+
+        if (req.user.role !== 'admin') {
+            query = { user: req.user._id };
+        }
+
+        const transactions = await StockTransaction.find(query)
             .populate('product', 'name price')
             .populate('user', 'name email')
             .sort({ createdAt: -1 })
