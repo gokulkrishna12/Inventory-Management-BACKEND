@@ -8,8 +8,8 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true, minlength: 6 },
     role: {
         type: String,
-        enum: ['admin', 'staff'],
-        default: 'staff'
+        enum: ['admin', 'staff', 'user'],
+        default: 'user'
     }
 }, { timestamps: true });
 
@@ -27,4 +27,5 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
 
-module.exports = mongoose.model('User', userSchema);
+// FORCE Mongoose to use exactly "users1" as the collection name
+module.exports = mongoose.model('User', userSchema, 'users1');

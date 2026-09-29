@@ -11,7 +11,7 @@ const generateToken = (id, role) => {
 // @desc    Register new user
 // @route   POST /api/auth/register
 exports.register = catchAsync(async (req, res) => {
-    const { name, email, password, role } = req.body;
+    const { email, password, role } = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -19,12 +19,21 @@ exports.register = catchAsync(async (req, res) => {
         throw new Error('User already exists');
     }
 
-    const user = await User.create({ name, email, password, role });
+    // Auto-generate name logic: user1, user2, etc.
+    const totalUsers = await User.countDocuments();
+    const autoName = `user${totalUsers + 1}`;
+
+    const user = await User.create({
+        name: autoName,
+        email,
+        password,
+        role: role || 'user'
+    });
 
     res.status(201).json({
         success: true,
         data: { _id: user._id, name: user.name, email: user.email, role: user.role },
-        token: generateToken(user._id, user.role) // FIXED
+        token: generateToken(user._id, user.role)
     });
 });
 
@@ -39,7 +48,7 @@ exports.login = catchAsync(async (req, res) => {
         res.status(200).json({
             success: true,
             data: { _id: user._id, name: user.name, email: user.email, role: user.role },
-            token: generateToken(user._id, user.role) // FIXED
+            token: generateToken(user._id, user.role)
         });
     } else {
         res.status(401);
