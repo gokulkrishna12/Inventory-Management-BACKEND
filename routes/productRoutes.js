@@ -9,7 +9,7 @@ const {
   updateProduct,
   deleteProduct,
   sellProduct,
-  getTransactionHistory // <-- Added this here
+  getTransactionHistory
 } = require('../controllers/productController.js');
 
 const { protect, authorizeRoles } = require('../middleware/authMiddleware.js');
@@ -18,8 +18,9 @@ const { protect, authorizeRoles } = require('../middleware/authMiddleware.js');
 router.route('/low-stock')
   .get(protect, getLowStockProducts);
 
-// NEW: Admin Audit History Route
-router.get('/transactions/history', protect, authorizeRoles('admin'), getTransactionHistory);
+// FIXED: Removed authorizeRoles('admin') so both Admins AND Users can hit this route.
+// The controller will automatically filter the data based on who is asking.
+router.get('/transactions/history', protect, getTransactionHistory);
 
 router.route('/')
   .get(protect, getProducts)

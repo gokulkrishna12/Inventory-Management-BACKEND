@@ -11,7 +11,8 @@ const generateToken = (id, role) => {
 // @desc    Register new user
 // @route   POST /api/auth/register
 exports.register = catchAsync(async (req, res) => {
-    const { email, password, role } = req.body;
+    // FIX: Brought 'name' back so we catch what the user actually types!
+    const { name, email, password, role } = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -19,14 +20,11 @@ exports.register = catchAsync(async (req, res) => {
         throw new Error('User already exists');
     }
 
-    // Auto-generate name logic: user1, user2, etc.
-    const totalUsers = await User.countDocuments();
-    const autoName = `user${totalUsers + 1}`;
-
+    // Save the ACTUAL name they typed into the users1 database collection
     const user = await User.create({
-        name: autoName,
-        email,
-        password,
+        name: name,
+        email: email,
+        password: password,
         role: role || 'user'
     });
 
