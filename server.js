@@ -1,48 +1,61 @@
+// server.js
 const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
 const dotenv = require('dotenv');
+const cors = require('cors');
+const mongoose = require('mongoose');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
-// Load environment variables
-dotenv.config();
+// Swagger UI imports
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
 
+const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
+const csvRoutes = require('./routes/csvRoutes');
+const { errorHandler } = require('./middleware/errorMiddleware');
 
+dotenv.config();
 const app = express();
 
-// Middleware
+app.use(helmet());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests from this IP, please try again after 15 minutes'
+});
+app.use('/api', limiter);
+
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Load Swagger document and mount the UI
+const swaggerDocument = YAML.load('./swagger.yaml');
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// Connect to real Database ONLY if we are not running automated tests
+if (process.env.NODE_ENV !== 'test') {
+  mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('MongoDB Connected successfully!'))
+    .catch((err) => console.log('MongoDB Connection Failed:', err));
+}
+
+// Mount Route Middleware
+app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/csv', csvRoutes);
 
-// Health check endpoint
-app.get('/', (req, res) => {
-  res.json({
-    status: 'OK',
-    message: 'Inventory Management API is running'
+app.use(errorHandler);
+
+if (process.env.NODE_ENV !== 'test') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+    console.log(`Swagger Docs available at http://localhost:${PORT}/api-docs`);
   });
-});
-
-// Database connection & Server start
-const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/inventory_management';
-
-mongoose
-  .connect(MONGO_URI)
-  .then(() => {
-    console.log('Successfully connected to MongoDB.');
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err.message);
-    // Still allow server to listen for requests/testing if required, or exit
-    app.listen(PORT, () => {
-      console.log(`Server running in offline DB mode on port ${PORT}`);
-    });
-  });
+}
 
 module.exports = app;

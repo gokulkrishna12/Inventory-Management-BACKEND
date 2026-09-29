@@ -1,3 +1,4 @@
+// models/Product.js
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema(
@@ -8,9 +9,9 @@ const productSchema = new mongoose.Schema(
       trim: true
     },
     category: {
-      type: String,
-      required: [true, 'Product category is required'],
-      trim: true
+      type: mongoose.Schema.Types.ObjectId, // Now references the Category model
+      ref: 'Category',
+      required: [true, 'Product category is required']
     },
     price: {
       type: Number,
@@ -24,9 +25,9 @@ const productSchema = new mongoose.Schema(
       min: [0, 'Quantity cannot be negative']
     },
     supplier: {
-      type: String,
-      required: [true, 'Supplier is required'],
-      trim: true
+      type: mongoose.Schema.Types.ObjectId, // Now references the Supplier model
+      ref: 'Supplier',
+      required: [true, 'Supplier is required']
     },
     createdAt: {
       type: Date,

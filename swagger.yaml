@@ -1,0 +1,86 @@
+openapi: 3.0.0
+info:
+  title: Enterprise Inventory Management API
+  description: API documentation for the MERN Inventory Management System
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+    description: Development Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/auth/login:
+    post:
+      summary: Login user
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  example: admin@gk.com
+                password:
+                  type: string
+                  example: password123
+      responses:
+        "200":
+          description: Successful login returns a JWT token
+
+  /api/products:
+    get:
+      summary: Get all products (with pagination & search)
+      tags: [Products]
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+          description: Page number
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Search keyword
+      responses:
+        "200":
+          description: A list of products
+
+    post:
+      summary: Create a new product
+      tags: [Products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                price:
+                  type: number
+                quantity:
+                  type: number
+                category:
+                  type: string
+                  description: Must be a valid Category ObjectId
+                supplier:
+                  type: string
+                  description: Must be a valid Supplier ObjectId
+      responses:
+        "201":
+          description: Product created successfully
