@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
-  title: Enterprise Inventory Management API
-  description: API documentation for the MERN Inventory Management System
+  title: GK's Enterprise Hub API
+  description: Complete API documentation for the MERN Inventory Management System & POS.
   version: 1.0.0
 servers:
   - url: http://localhost:5000
@@ -18,6 +18,31 @@ security:
   - bearerAuth: []
 
 paths:
+  /api/auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+                role:
+                  type: string
+                  enum: [admin, staff, user]
+      responses:
+        "201":
+          description: Registration successful, returns JWT
+
   /api/auth/login:
     post:
       summary: Login user
@@ -55,12 +80,17 @@ paths:
           schema:
             type: string
           description: Search keyword
+        - in: query
+          name: category
+          schema:
+            type: string
+          description: Category ID filter
       responses:
         "200":
-          description: A list of products
+          description: A paginated list of products
 
     post:
-      summary: Create a new product
+      summary: Create a new product (Admin/Staff only)
       tags: [Products]
       requestBody:
         required: true
@@ -74,13 +104,136 @@ paths:
                 price:
                   type: number
                 quantity:
-                  type: number
+                  type: integer
                 category:
                   type: string
-                  description: Must be a valid Category ObjectId
+                  description: Valid Category Name or ObjectId
                 supplier:
                   type: string
-                  description: Must be a valid Supplier ObjectId
+                  description: Valid Supplier Name or ObjectId
       responses:
         "201":
           description: Product created successfully
+
+  /api/products/low-stock:
+    get:
+      summary: Retrieve items below the minimum stock threshold
+      tags: [Products]
+      parameters:
+        - in: query
+          name: threshold
+          schema:
+            type: integer
+          description: Default is 10
+      responses:
+        "200":
+          description: List of low stock products
+
+  /api/products/transactions/history:
+    get:
+      summary: Get transaction audit logs
+      tags: [Transactions]
+      responses:
+        "200":
+          description: History of IN/OUT stock movements
+
+  /api/products/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: MongoDB ObjectId
+    get:
+      summary: Get single product by ID
+      tags: [Products]
+      responses:
+        "200":
+          description: Product details
+    put:
+      summary: Update a product (Admin/Staff only)
+      tags: [Products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                price:
+                  type: number
+                quantity:
+                  type: integer
+                category:
+                  type: string
+                supplier:
+                  type: string
+      responses:
+        "200":
+          description: Product updated successfully
+    delete:
+      summary: Delete a product (Admin only)
+      tags: [Products]
+      responses:
+        "200":
+          description: Product deleted successfully
+
+  /api/products/{id}/sell:
+    post:
+      summary: Process a POS sale
+      tags: [Transactions]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantitySold:
+                  type: integer
+      responses:
+        "200":
+          description: Sale successful and stock updated
+
+  /api/analytics/summary:
+    get:
+      summary: Get dashboard analytics (Admin/Staff only)
+      tags: [Analytics]
+      responses:
+        "200":
+          description: Aggregated inventory stats and category distributions
+
+  /api/csv/export:
+    get:
+      summary: Export inventory as CSV (Admin/Staff only)
+      tags: [CSV]
+      responses:
+        "200":
+          description: CSV file download
+
+  /api/csv/import-stock:
+    post:
+      summary: Bulk update stock via CSV upload (Admin only, 5MB Limit)
+      tags: [CSV]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Import successful
